@@ -76,11 +76,12 @@ that make copy-pasting difficult. Use the export script to produce a clean YAML:
 ```bash
 ros2 run vectornav vn_set_antenna_config \
     --ros-args -p serial_port:=/dev/ttyUSB0 -p read_only:=true \
-  | python3 scripts/dump_to_config.py > my_antenna_offset.yaml
+  2>&1 | python3 scripts/dump_to_config.py > my_antenna_offset.yaml
 ```
 
-The generated file is a drop-in replacement for `config/antenna_offset.yaml`. Only
-writable registers are exported (the read-only estimated baseline is omitted).
+ROS2 logs go to stderr, so `2>&1` is required before the pipe. The generated
+file is a drop-in replacement for `config/antenna_offset.yaml`. Only writable
+registers are exported (the read-only estimated baseline is omitted).
 
 ### Volatile writes (important)
 

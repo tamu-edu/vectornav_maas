@@ -15,7 +15,9 @@ The read-only GpsCompassEstimatedBaseline is omitted.
 Usage:
     ros2 run vectornav vn_set_antenna_config \
         --ros-args -p serial_port:=/dev/ttyUSB0 -p read_only:=true \
-      | python3 scripts/dump_to_config.py > my_antenna_offset.yaml
+      2>&1 | python3 scripts/dump_to_config.py > my_antenna_offset.yaml
+
+Note: ROS2 logs go to stderr, so `2>&1` is required before the pipe.
 
 Then edit the generated file (verify values, set read_only: false) and write it
 back:
