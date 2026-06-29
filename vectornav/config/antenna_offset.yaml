@@ -1,0 +1,26 @@
+# Utility to set / dump the GPS Antenna Offset and GPS Compass Baseline
+# registers on a VectorNav sensor. Launch with:
+#   ros2 launch vectornav set_antenna_offset.launch.py
+# Edit the values below, then set read_only: false to write them to the sensor.
+vn_set_antenna_config:
+  ros__parameters:
+    # Serial port and baud for the utility. Acceptable baud rates:
+    # 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600
+    serial_port: "/dev/ttyUSB0"
+    serial_baud: 115200
+
+    # Read-only mode: dump current antenna offset / baseline registers and
+    # exit without writing anything. Set false to write the values below.
+    read_only: false
+
+    # GPS Antenna Offset (meters, body frame). Available on GPS-capable
+    # devices (VN-200 / VN-300). Leave as a 3-element list to write this
+    # register; comment out to skip writing.
+    gps_antenna_offset: [0.0, 0.0, 0.0]
+
+    # GPS Compass Baseline (meters, body frame). VN-300 dual-antenna feature
+    # only. Requires both position and uncertainty. Leave as 3-element lists
+    # to write; comment out to skip writing.
+    gps_compass_baseline:
+      position: [0.0, 0.0, 0.0]
+      uncertainty: [0.0, 0.0, 0.0]

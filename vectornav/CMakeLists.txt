@@ -53,6 +53,12 @@ add_executable(vn_sensor_msgs src/vn_sensor_msgs_node.cc)
 ament_target_dependencies(vn_sensor_msgs rclcpp geometry_msgs vectornav_msgs)
 target_link_libraries(vn_sensor_msgs vn_sensor_msgs_lib)
 
+# vn_set_antenna_config utility executable to set/dump GPS Antenna Offset
+# and GPS Compass Baseline registers on a VectorNav sensor from ROS2 params.
+add_executable(vn_set_antenna_config src/set_antenna_config.cc)
+ament_target_dependencies(vn_set_antenna_config rclcpp)
+target_link_libraries(vn_set_antenna_config vncxx)
+
 
 # install shared libraries with composable nodes into global
 # directory so they can be loaded by other packages
@@ -65,6 +71,7 @@ install(TARGETS
 install(TARGETS
   ${PROJECT_NAME}
   vn_sensor_msgs
+  vn_set_antenna_config
   DESTINATION lib/${PROJECT_NAME})
 
 install(DIRECTORY
