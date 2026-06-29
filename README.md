@@ -41,6 +41,57 @@ This node will convert the custom raw data topics into ROS2 sensor_msgs topics t
 to integrate with other ROS2 packages. 
 
 
-## References 
+## vn_set_antenna_config utility
+
+A standalone utility to set or dump the GPS Antenna Offset and GPS Compass Baseline
+registers on a VectorNav sensor from ROS2 parameters. Antenna offset is available on
+GPS-capable devices (VN-200/VN-300/VN-310); the compass baseline is a dual-antenna
+feature (VN-300/VN-310).
+
+### Dump current register values (read-only)
+
+```bash
+ros2 launch vectornav set_antenna_offset.launch.py
+# or:
+ros2 run vectornav vn_set_antenna_config \
+    --ros-args -p serial_port:=/dev/ttyUSB0 -p serial_baud:=115200 -p read_only:=true
+```
+
+### Write register values
+
+Edit `config/antenna_offset.yaml` (set `read_only: false`, fill in `gps_antenna_offset`
+and/or `gps_compass_baseline`), then:
+
+```bash
+ros2 launch vectornav set_antenna_offset.launch.py
+```
+
+The utility writes the values and reads them back for verification.
+
+### Export a dump to a params file
+
+The dump output includes ROS log prefixes and read-only registers (estimated baseline)
+that make copy-pasting difficult. Use the export script to produce a clean YAML:
+
+```bash
+ros2 run vectornav vn_set_antenna_config \
+    --ros-args -p serial_port:=/dev/ttyUSB0 -p read_only:=true \
+  | python3 scripts/dump_to_config.py > my_antenna_offset.yaml
+```
+
+The generated file is a drop-in replacement for `config/antenna_offset.yaml`. Only
+writable registers are exported (the read-only estimated baseline is omitted).
+
+### Volatile writes (important)
+
+Register writes via this utility are **volatile** — values revert to whatever is stored
+in the sensor's flash on power cycle. To persist values, either:
+
+1. Call `writeSettings()` on the sensor to save current registers to flash (not yet
+   exposed by this utility), or
+2. Re-run this config on each boot (e.g. add the launch file to your robot startup).
+
+
+## References
 
 [1] [VectorNav](http://www.vectornav.com/)

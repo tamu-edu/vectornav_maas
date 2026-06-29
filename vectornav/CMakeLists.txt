@@ -75,7 +75,7 @@ install(TARGETS
   DESTINATION lib/${PROJECT_NAME})
 
 install(DIRECTORY
-  config launch
+  config launch scripts
   DESTINATION share/${PROJECT_NAME}/
 )
 
