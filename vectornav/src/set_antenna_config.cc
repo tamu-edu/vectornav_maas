@@ -201,9 +201,11 @@ int main(int argc, char * argv[])
   std::string fv = vs.readFirmwareVersion();
   RCLCPP_INFO(logger, "Model Number: %s, Firmware Version: %s", mn.c_str(), fv.c_str());
 
-  vn::sensors::VnSensor::Family family = vs.determineDeviceFamily();
-  bool is_vn100 = (family == vn::sensors::VnSensor::Family::VnSensor_Family_Vn100);
-  bool is_vn300 = (family == vn::sensors::VnSensor::Family::VnSensor_Family_Vn300);
+  // Determine device capabilities from the model number string. The
+  // vnproglib Family enum predates the VN-310 (a dual-antenna GNSS/INS like
+  // the VN-300) and reports it as Family_Unknown, so we can't rely on it.
+  bool is_vn100 = (mn.find("VN-100") == 0);
+  bool is_dual_antenna = (mn.find("VN-3") == 0);  // VN-300, VN-310
 
   if (read_only) {
     RCLCPP_INFO(logger, "=== Read-only mode: dumping current register values ===");
@@ -219,8 +221,10 @@ int main(int argc, char * argv[])
       }
     }
 
-    if (!is_vn300) {
-      RCLCPP_WARN(logger, "GpsCompassBaseline is only available on the VN-300");
+    if (!is_dual_antenna) {
+      RCLCPP_WARN(
+        logger,
+        "GpsCompassBaseline is only available on dual-antenna devices (VN-300/VN-310)");
     } else {
       try {
         vn::sensors::GpsCompassBaselineRegister bl = vs.readGpsCompassBaseline();
@@ -264,8 +268,11 @@ int main(int argc, char * argv[])
     }
 
     if (has_baseline) {
-      if (!is_vn300) {
-        RCLCPP_WARN(logger, "GpsCompassBaseline is only available on the VN-300; skipping");
+      if (!is_dual_antenna) {
+        RCLCPP_WARN(
+          logger,
+          "GpsCompassBaseline is only available on dual-antenna devices "
+          "(VN-300/VN-310); skipping");
       } else {
         RCLCPP_INFO(logger, "Writing GPS Compass Baseline...");
         try {
