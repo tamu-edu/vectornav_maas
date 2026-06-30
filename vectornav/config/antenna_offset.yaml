@@ -13,6 +13,11 @@ vn_set_antenna_config:
     # exit without writing anything. Set false to write the values below.
     read_only: false
 
+    # Persist register writes to flash so they survive power cycle.
+    # Default false — writes are volatile unless this is set true.
+    # Note: writeSettings() saves ALL current register values to flash.
+    persist: false
+
     # GPS Antenna Offset (meters, body frame). Available on GPS-capable
     # devices (VN-200 / VN-300). Leave as a 3-element list to write this
     # register; comment out to skip writing.

@@ -130,6 +130,8 @@ int main(int argc, char * argv[])
   auto SensorPort = node->declare_parameter<std::string>("serial_port", "/dev/ttyUSB0");
   auto SensorBaudrate = node->declare_parameter<int>("serial_baud", 115200);
   auto read_only = node->declare_parameter<bool>("read_only", false);
+  // Persist register writes to flash so they survive power cycle.
+  auto persist = node->declare_parameter<bool>("persist", false);
 
   // Optional antenna offset / baseline values. An empty array means "skip".
   node->declare_parameter<std::vector<double>>("gps_antenna_offset", std::vector<double>{});
@@ -245,6 +247,27 @@ int main(int argc, char * argv[])
       }
     }
   } else {
+    // Safety: dump current values before overwriting, so users can recover
+    // the original settings if they accidentally write wrong values.
+    RCLCPP_INFO(logger, "=== Current values (before write) ===");
+    if (!is_vn100) {
+      try {
+        vn::math::vec3f ao = vs.readGpsAntennaOffset();
+        printVec3f(logger, "Current GPS Antenna Offset", ao);
+      } catch (const std::exception & e) {
+        RCLCPP_WARN(logger, "Failed reading GpsAntennaOffset: %s", e.what());
+      }
+    }
+    if (is_dual_antenna) {
+      try {
+        vn::sensors::GpsCompassBaselineRegister bl = vs.readGpsCompassBaseline();
+        printVec3f(logger, "Current GPS Compass Baseline Position", bl.position);
+        printVec3f(logger, "Current GPS Compass Baseline Uncertainty", bl.uncertainty);
+      } catch (const std::exception & e) {
+        RCLCPP_WARN(logger, "Failed reading GpsCompassBaseline: %s", e.what());
+      }
+    }
+
     if (!has_antenna_offset && !has_baseline) {
       RCLCPP_WARN(
         logger,
@@ -283,6 +306,23 @@ int main(int argc, char * argv[])
         } catch (const std::exception & e) {
           RCLCPP_ERROR(logger, "Failed writing GpsCompassBaseline: %s", e.what());
         }
+      }
+    }
+  }
+
+  // Persist register writes to flash so they survive power cycle.
+  // writeSettings() saves ALL current register values, not just the ones
+  // written above. It can take ~2.5 s to complete.
+  if (persist) {
+    if (read_only) {
+      RCLCPP_WARN(logger, "persist is true but read_only is true; skipping writeSettings");
+    } else {
+      RCLCPP_INFO(logger, "Persisting settings to flash (writeSettings)...");
+      try {
+        vs.writeSettings();
+        RCLCPP_INFO(logger, "Settings saved to flash");
+      } catch (const std::exception & e) {
+        RCLCPP_ERROR(logger, "Failed writing settings to flash: %s", e.what());
       }
     }
   }

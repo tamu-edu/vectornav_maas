@@ -89,14 +89,14 @@ def emit_yaml(data):
         lines.append(f"# Device: {data['model']}{fw}")
     lines.append("#")
     lines.append("# NOTE: VectorNav register writes are volatile — values revert on")
-    lines.append("# power cycle. To persist to flash, call writeSettings() on the")
-    lines.append("# sensor (not yet exposed by this utility). Alternatively, re-run")
-    lines.append("# this config on each boot via the launch file.")
+    lines.append("# power cycle. To persist to flash, set persist: true (calls")
+    lines.append("# writeSettings()) or re-run this config on each boot.")
     lines.append("vn_set_antenna_config:")
     lines.append("  ros__parameters:")
     lines.append(f'    serial_port: "{data["port"]}"')
     lines.append(f"    serial_baud: {data['baud']}")
     lines.append("    read_only: false")
+    lines.append("    persist: false")
 
     regs = data["registers"]
     if "gps_antenna_offset" in regs:

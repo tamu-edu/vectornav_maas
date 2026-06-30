@@ -66,7 +66,19 @@ and/or `gps_compass_baseline`), then:
 ros2 launch vectornav set_antenna_offset.launch.py
 ```
 
-The utility writes the values and reads them back for verification.
+The utility first prints the current register values (so you can recover them if a
+write goes wrong), then writes the new values and reads them back for verification.
+
+To persist the written values to flash so they survive power cycle, set `persist: true`:
+
+```bash
+ros2 run vectornav vn_set_antenna_config \
+    --ros-args -p serial_port:=/dev/ttyUSB0 -p read_only:=false -p persist:=true
+```
+
+Note: `writeSettings()` saves **all** current register values to flash, not just the
+ones written by this utility. If `read_only: true` and `persist: true` are both set,
+`writeSettings()` is skipped with a warning.
 
 ### Export a dump to a params file
 
@@ -88,8 +100,8 @@ registers are exported (the read-only estimated baseline is omitted).
 Register writes via this utility are **volatile** — values revert to whatever is stored
 in the sensor's flash on power cycle. To persist values, either:
 
-1. Call `writeSettings()` on the sensor to save current registers to flash (not yet
-   exposed by this utility), or
+1. Set `persist: true` to call `writeSettings()` on the sensor (saves all current
+   register values to flash), or
 2. Re-run this config on each boot (e.g. add the launch file to your robot startup).
 
 
