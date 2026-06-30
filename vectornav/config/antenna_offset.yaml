@@ -11,7 +11,7 @@ vn_set_antenna_config:
 
     # Read-only mode: dump current antenna offset / baseline registers and
     # exit without writing anything. Set false to write the values below.
-    read_only: false
+    read_only: true
 
     # Persist register writes to flash so they survive power cycle.
     # Default false — writes are volatile unless this is set true.
