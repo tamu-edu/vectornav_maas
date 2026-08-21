@@ -95,23 +95,38 @@ VnSensorMsgs::VnSensorMsgs(const rclcpp::NodeOptions & options) : Node("vn_senso
 }
 
 
-static void convert_vec_frd_to_rfu(const geometry_msgs::msg::Vector3 & vec_frd, geometry_msgs::msg::Vector3 & vec_rfu)
+/** Rotate a body-frame vector from the VectorNav FRD (Forward-Right-Down) body
+ *  axes into the ROS REP-103 FLU (Forward-Left-Up) body axes.
+ *
+ *  This is a 180 degree rotation about the body x (forward) axis. Determinant
+ *  is +1, so handedness is preserved (both frames are right-handed).
+ */
+static void convert_vec_frd_to_flu(const geometry_msgs::msg::Vector3 & vec_frd, geometry_msgs::msg::Vector3 & vec_flu)
 {
-  // swap x and y and negate z
-  vec_rfu.x = vec_frd.y;
-  vec_rfu.y = vec_frd.x;
-  vec_rfu.z = -vec_frd.z;
+  // keep x (forward), negate y (right -> left) and z (down -> up)
+  vec_flu.x = vec_frd.x;
+  vec_flu.y = -vec_frd.y;
+  vec_flu.z = -vec_frd.z;
 }
 
-static void convert_to_enu(const geometry_msgs::msg::Quaternion & q_msg_frd2ned, geometry_msgs::msg::Quaternion & q_msg_rfu2enu)
+/** Convert the VectorNav attitude quaternion from (FRD body relative to NED world)
+ *  into the ROS REP-103 convention (FLU body relative to ENU world).
+ *
+ *    R_enu_flu = R_enu_ned * R_ned_frd * R_frd_flu
+ *
+ *  R_enu_ned is a 180 deg rotation about the NE bisector (swaps N/E, flips D->U).
+ *  R_frd_flu is a 180 deg rotation about the forward axis.
+ *
+ *  Sanity check: vehicle level and facing East yields the identity quaternion.
+ */
+static void convert_to_enu(const geometry_msgs::msg::Quaternion & q_msg_frd2ned, geometry_msgs::msg::Quaternion & q_msg_flu2enu)
 {
-  // convert from FRD_TO_NED to RFU_TO_ENU attitude
   static const tf2::Quaternion q_ned2enu(tf2::Vector3(1, 1, 0).normalized(), M_PI);
-  static const tf2::Quaternion q_rfu2frd(tf2::Vector3(1, 1, 0).normalized(), M_PI);
+  static const tf2::Quaternion q_flu2frd(tf2::Vector3(1, 0, 0), M_PI);
   tf2::Quaternion q_frd2ned;
   tf2::fromMsg(q_msg_frd2ned, q_frd2ned);
-  tf2::Quaternion q_rfu2enu = q_ned2enu * q_frd2ned * q_rfu2frd;
-  q_msg_rfu2enu = tf2::toMsg(q_rfu2enu);
+  tf2::Quaternion q_flu2enu = q_ned2enu * q_frd2ned * q_flu2frd;
+  q_msg_flu2enu = tf2::toMsg(q_flu2enu);
 }
 
 /** Convert VN common group data to ROS2 standard message types
@@ -179,8 +194,9 @@ void VnSensorMsgs::sub_vn_common(const vectornav_msgs::msg::CommonGroup::SharedP
     msg.header = msg_in->header;
 
     if (use_enu) {
-      convert_vec_frd_to_rfu(msg_in->angularrate, msg.angular_velocity);
-      convert_vec_frd_to_rfu(msg_in->accel, msg.linear_acceleration);
+      msg.header.frame_id += "_flu";
+      convert_vec_frd_to_flu(msg_in->angularrate, msg.angular_velocity);
+      convert_vec_frd_to_flu(msg_in->accel, msg.linear_acceleration);
       convert_to_enu(msg_in->quaternion, msg.orientation);
     } else {
       msg.angular_velocity = msg_in->angularrate;
@@ -202,14 +218,17 @@ void VnSensorMsgs::sub_vn_common(const vectornav_msgs::msg::CommonGroup::SharedP
     msg.header = msg_in->header;
 
     if (use_enu) {
-      convert_vec_frd_to_rfu(msg_in->imu_rate, msg.angular_velocity);
-      convert_vec_frd_to_rfu(msg_in->imu_accel, msg.linear_acceleration);
+      msg.header.frame_id += "_flu";
+      convert_vec_frd_to_flu(msg_in->imu_rate, msg.angular_velocity);
+      convert_vec_frd_to_flu(msg_in->imu_accel, msg.linear_acceleration);
       convert_to_enu(msg_in->quaternion, msg.orientation);
     } else {
       msg.angular_velocity = msg_in->imu_rate;
       msg.linear_acceleration = msg_in->imu_accel;
+      msg.orientation = msg_in->quaternion;
     }
 
+    fill_covariance_from_param("orientation_covariance", msg.orientation_covariance);
     fill_covariance_from_param("angular_velocity_covariance", msg.angular_velocity_covariance);
     fill_covariance_from_param(
       "linear_acceleration_covariance", msg.linear_acceleration_covariance);
@@ -222,7 +241,8 @@ void VnSensorMsgs::sub_vn_common(const vectornav_msgs::msg::CommonGroup::SharedP
     sensor_msgs::msg::MagneticField msg;
     msg.header = msg_in->header;
     if (use_enu) {
-      convert_vec_frd_to_rfu(msg_in->magpres_mag, msg.magnetic_field);
+      msg.header.frame_id += "_flu";
+      convert_vec_frd_to_flu(msg_in->magpres_mag, msg.magnetic_field);
     } else {
       msg.magnetic_field = msg_in->magpres_mag;
     }
@@ -269,10 +289,19 @@ void VnSensorMsgs::sub_vn_common(const vectornav_msgs::msg::CommonGroup::SharedP
     msg.longitude = msg_in->position.y;
     msg.altitude = msg_in->position.z;
 
-    // Covariance (Convert NED to ENU)
+    // Covariance
+    // gps_posu_ holds 1-sigma position uncertainty in METERS along NED axes,
+    // so it must be squared to become a variance. When use_enu is set, the
+    // North and East terms swap to match the ENU axis order.
     /// TODO(Dereck): Use DOP for better estimate?
-    const std::vector<double> orientation_covariance_ = {
-      gps_posu_.y, 0.0000, 0.0000, 0.0000, gps_posu_.x, 0.0000, 0.0000, 0.0000, gps_posu_.z};
+    if (use_enu) {
+      msg.position_covariance[0] = gps_posu_.y * gps_posu_.y;  // East
+      msg.position_covariance[4] = gps_posu_.x * gps_posu_.x;  // North
+    } else {
+      msg.position_covariance[0] = gps_posu_.x * gps_posu_.x;  // North
+      msg.position_covariance[4] = gps_posu_.y * gps_posu_.y;  // East
+    }
+    msg.position_covariance[8] = gps_posu_.z * gps_posu_.z;
 
     msg.position_covariance_type = sensor_msgs::msg::NavSatFix::COVARIANCE_TYPE_DIAGONAL_KNOWN;
 
@@ -284,8 +313,9 @@ void VnSensorMsgs::sub_vn_common(const vectornav_msgs::msg::CommonGroup::SharedP
     geometry_msgs::msg::TwistWithCovarianceStamped msg;
     msg.header = msg_in->header;
     if (use_enu) {
-      convert_vec_frd_to_rfu(ins_velbody_, msg.twist.twist.linear);
-      convert_vec_frd_to_rfu(msg_in->angularrate, msg.twist.twist.angular);
+      msg.header.frame_id += "_flu";
+      convert_vec_frd_to_flu(ins_velbody_, msg.twist.twist.linear);
+      convert_vec_frd_to_flu(msg_in->angularrate, msg.twist.twist.angular);
     } else {
       msg.twist.twist.linear = ins_velbody_;
       msg.twist.twist.angular = msg_in->angularrate;
@@ -312,9 +342,9 @@ void VnSensorMsgs::sub_vn_common(const vectornav_msgs::msg::CommonGroup::SharedP
                   * tf2::Quaternion(tf2::Vector3(0, 1, 0), -M_PI/2 - latitude);
 
     if (use_enu) {
-      static const tf2::Quaternion q_rfu2frd(tf2::Vector3(1, 1, 0).normalized(), M_PI);
-      tf2::Quaternion q_rfu2ecef =q_ned2ecef * q_frd2ned * q_rfu2frd;
-      msg.pose.pose.orientation = tf2::toMsg(q_rfu2ecef);
+      static const tf2::Quaternion q_flu2frd(tf2::Vector3(1, 0, 0), M_PI);
+      tf2::Quaternion q_flu2ecef = q_ned2ecef * q_frd2ned * q_flu2frd;
+      msg.pose.pose.orientation = tf2::toMsg(q_flu2ecef);
     } else {
       tf2::Quaternion q_frd2ecef =q_ned2ecef * q_frd2ned;
       msg.pose.pose.orientation = tf2::toMsg(q_frd2ecef);
